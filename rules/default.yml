@@ -1,0 +1,43 @@
+# Jeu de règles par défaut de phpscan (moteur regex).
+# Champs : id, name, severity (HIGH|MEDIUM|LOW), cwe, pattern (regex Python), message, fix
+# TODO phase 3 : affiner chaque motif et l'éprouver sur tests/fixtures.
+
+- id: PHP-SQLI-001
+  name: SQL construit par concaténation
+  severity: HIGH
+  cwe: CWE-89
+  pattern: '(mysqli_query|mysql_query|pg_query|->query|->exec)\s*\(.*(\.\s*\$|\$_(GET|POST|REQUEST|COOKIE))'
+  message: Requête SQL construite par concaténation de variables
+  fix: Utiliser une requête préparée (PDO::prepare + execute)
+
+- id: PHP-EXEC-001
+  name: Exécution de code ou de commande
+  severity: HIGH
+  cwe: CWE-95
+  pattern: '\b(eval|exec|system|shell_exec|passthru|popen|proc_open)\s*\('
+  message: Appel à une fonction d'exécution de code ou de commande
+  fix: Supprimer l'appel ; sinon valider par liste blanche et utiliser escapeshellarg
+
+- id: PHP-SECRET-001
+  name: Secret en dur
+  severity: MEDIUM
+  cwe: CWE-798
+  pattern: '\$\w*(pass(word)?|pwd|secret|api_?key|token)\w*\s*=\s*[''"][^''"]{6,}[''"]'
+  message: Secret potentiellement écrit en dur dans le code
+  fix: Lire la valeur depuis une variable d'environnement (getenv) ou un fichier .env hors dépôt
+
+- id: PHP-HASH-001
+  name: Hachage faible de mot de passe
+  severity: HIGH
+  cwe: CWE-916
+  pattern: '\b(md5|sha1)\s*\(\s*\$\w*(pass|pwd|mdp)'
+  message: md5/sha1 utilisé pour hacher un mot de passe
+  fix: Utiliser password_hash() et password_verify()
+
+- id: PHP-INPUT-001
+  name: Entrée utilisateur non filtrée
+  severity: MEDIUM
+  cwe: CWE-20
+  pattern: '\b(echo|print|include|require|include_once|require_once)\b[^;]*\$_(GET|POST|REQUEST|COOKIE)\['
+  message: Entrée utilisateur utilisée directement sans filtrage
+  fix: Valider (filter_input) et échapper (htmlspecialchars) avant usage
