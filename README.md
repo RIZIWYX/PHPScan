@@ -6,6 +6,8 @@
 ![Statut](https://img.shields.io/badge/statut-en%20d%C3%A9veloppement-yellow)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
+![Démo : analyse de fichiers PHP vulnérables, rapport JSON et tests](docs/demo.gif)
+
 > **Outil pédagogique.** phpscan n'a pas vocation à remplacer Semgrep, Bandit ou un audit de sécurité professionnel. Il sert à comprendre comment fonctionne une analyse statique de sécurité, et à mesurer honnêtement ses limites.
 
 Analyseur statique qui scanne du code PHP et signale des motifs à risque : injections SQL par concaténation, exécution de code ou de commandes, secrets en dur, hachage faible de mots de passe, entrées utilisateur non filtrées.
