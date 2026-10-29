@@ -1,6 +1,6 @@
 # phpscan
 
-[![CI](https://github.com/RIZIWYX/phpscan/actions/workflows/ci.yml/badge.svg)](https://github.com/RIZIWYX/phpscan/actions/workflows/ci.yml)
+[![CI](https://github.com/RIZIWYX/PHPScan/actions/workflows/ci.yml/badge.svg)](https://github.com/RIZIWYX/PHPScan/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Sortie](https://img.shields.io/badge/rapports-console%20%7C%20JSON%20%7C%20SARIF-informational)
 ![Statut](https://img.shields.io/badge/statut-en%20d%C3%A9veloppement-yellow)
@@ -40,7 +40,7 @@ Sur le jeu de test actuel (5 fichiers vulnérables, 3 fichiers sains), le moteur
 ## Installation
 
 ```bash
-git clone https://github.com/RIZIWYX/phpscan.git
+git clone https://github.com/RIZIWYX/PHPScan.git
 cd phpscan
 python -m venv .venv
 source .venv/bin/activate        # Windows : .venv\Scripts\activate
