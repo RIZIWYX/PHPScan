@@ -18,7 +18,7 @@ def render(findings: list[Finding], rules: list[Rule]) -> str:
             "tool": {"driver": {
                 "name": "phpscan",
                 "version": __version__,
-                "informationUri": "https://github.com/RIZIWYX/phpscan",
+                "informationUri": "https://github.com/RIZIWYX/PHPScan",
                 "rules": [{
                     "id": r.id,
                     "name": r.name,
