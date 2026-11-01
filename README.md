@@ -53,7 +53,7 @@ pip install -e ".[dev]"
 phpscan chemin/vers/projet
 phpscan chemin/vers/projet --format json -o rapport.json
 phpscan chemin/vers/projet --format sarif -o rapport.sarif
-phpscan chemin/vers/projet --engine ast --min-severity MEDIUM
+phpscan chemin/vers/projet --min-severity MEDIUM   # seulement les alertes MEDIUM et plus
 ```
 
 Code de sortie : `0` si aucune alerte au-dessus du seuil, `1` sinon (utilisable en CI).
