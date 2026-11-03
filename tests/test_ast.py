@@ -82,3 +82,15 @@ def test_ast_baseline_does_not_regress():
     hold = evaluate(ROOT / "holdout", "ast").total
     assert dev.precision == 1 and dev.recall == 1
     assert hold.precision >= 1 and hold.recall >= 0.72
+
+
+def test_ternary_condition_does_not_taint_result(rules):
+    """Bug trouvé sur Yappli (accueil.php) : la condition ne souille pas le résultat."""
+    code = ("<?php\n$id = isset($_POST['id']) && $_POST['id'] !== '' ? (int) $_POST['id'] : null;\n"
+            "echo $id;\n")
+    assert scan_source(code, "t.php", rules) == []
+
+
+def test_ternary_tainted_branch_is_tainted(rules):
+    code = "<?php\n$x = isset($_GET['a']) ? $_GET['a'] : 'defaut';\necho $x;\n"
+    assert [f.rule_id for f in scan_source(code, "t.php", rules)] == ["PHP-INPUT-001"]
