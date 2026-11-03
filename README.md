@@ -44,7 +44,7 @@ git clone https://github.com/RIZIWYX/PHPScan.git
 cd phpscan
 python -m venv .venv
 source .venv/bin/activate        # Windows : .venv\Scripts\activate
-pip install -e ".[dev]"
+pip install -e ".[dev,ast]"     # ast = moteur tree-sitter
 ```
 
 ## Utilisation
@@ -54,6 +54,7 @@ phpscan chemin/vers/projet
 phpscan chemin/vers/projet --format json -o rapport.json
 phpscan chemin/vers/projet --format sarif -o rapport.sarif
 phpscan chemin/vers/projet --min-severity MEDIUM   # seulement les alertes MEDIUM et plus
+phpscan chemin/vers/projet --engine ast            # moteur AST + suivi de souillure (recommandé)
 ```
 
 Code de sortie : `0` si aucune alerte au-dessus du seuil, `1` sinon (utilisable en CI).
@@ -76,7 +77,8 @@ Le détail de chaque règle (pourquoi c'est risqué, exemple vulnérable, correc
 phpscan/
 ├── src/phpscan/        # CLI, chargement, moteurs regex / ast / llm, rapports
 ├── rules/default.yml   # Règles en YAML
-├── tests/              # Tests pytest + fixtures vulnérables et saines
+├── tests/fixtures/     # Jeu de développement (58 fichiers étiquetés)
+├── tests/holdout/      # Jeu de validation (20 fichiers, jamais utilisés pour régler)
 ├── docs/RULES.md       # Explication de chaque règle
 ├── benchmarks/         # Comparaison avec Semgrep (à venir)
 └── prompts/            # Prompt du moteur LLM
@@ -85,47 +87,75 @@ phpscan/
 ## Tests
 
 ```bash
-pytest          # 44 tests + 21 limites connues du moteur regex (xfail strict)
+pytest          # 128 tests + 24 limites connues (xfail strict)
 ruff check .
 ```
 
-Les cas que le moteur regex rate ou signale à tort sont marqués `xfail(strict=True)` : ils
+Les cas qu'un moteur rate ou signale à tort sont marqués `xfail(strict=True)` : ils
 documentent ses limites, et le test échoue dès qu'une amélioration en corrige un, pour
 qu'on mette la liste à jour.
 
-## Métriques
+## Deux moteurs
 
-Jeu de test étiqueté : 30 fichiers vulnérables et 28 fichiers sains « pièges » dans
-`tests/fixtures/`. Chaque vulnérabilité attendue est marquée sur sa ligne par
-`// EXPECT: <règle>`. Recalcul :
+**regex** (`--engine regex`) cherche des motifs dans le texte. Rapide, mais il ne voit pas
+la structure du code : il se fait piéger par les chaînes et les commentaires, ne reconnaît
+pas les fonctions d'échappement et ne suit pas une valeur d'une ligne à l'autre.
 
-```bash
-phpscan-metrics                       # tableau + liste des erreurs
-phpscan-metrics --format json         # pour comparer les moteurs
+**ast** (`--engine ast`) transforme le code en arbre syntaxique avec
+[tree-sitter](https://tree-sitter.github.io/) et suit les données souillées
+(*taint tracking*) :
+
+```php
+$q = $_GET['q'];                 // source : $q devient souillée
+$propre = htmlspecialchars($q);  // sanitizer : $propre est sûre
+echo $propre;                    // pas d'alerte
+echo "Résultats pour $q";        // $q souillée atteint un sink -> PHP-INPUT-001
 ```
 
-Moteur `regex` - 58 fichiers - 0.08 ms/fichier
+Sources : `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`. Sanitizers : `htmlspecialchars`,
+`intval`, `filter_input`, casts `(int)`/`(float)`, vérification `in_array` en liste blanche...
+Sinks : `echo`, `print`, `include`, requêtes SQL, fonctions d'exécution.
 
-| Règle | VP | FP | FN | Précision | Rappel |
-| --- | --- | --- | --- | --- | --- |
-| PHP-EXEC-001 | 5 | 1 | 1 | 83% | 83% |
-| PHP-HASH-001 | 3 | 0 | 3 | 100% | 50% |
-| PHP-INPUT-001 | 4 | 3 | 2 | 57% | 67% |
-| PHP-SECRET-001 | 3 | 3 | 3 | 50% | 50% |
-| PHP-SQLI-001 | 3 | 2 | 3 | 60% | 50% |
-| **Total** | 18 | 9 | 12 | **67%** | **60%** |
+## Métriques
+
+Deux jeux de fichiers étiquetés, chaque faille attendue étant marquée sur sa ligne par
+`// EXPECT: <règle>` :
+
+- **développement** (`tests/fixtures/`, 58 fichiers) : utilisé pour écrire les règles ;
+- **validation** (`tests/holdout/`, 20 fichiers) : écrit après le moteur AST et jamais
+  utilisé pour le régler. C'est la mesure qui compte.
+
+```bash
+phpscan-metrics --engine ast                  # jeu de développement
+phpscan-metrics tests/holdout --engine ast    # jeu de validation
+```
+
+| Moteur | Jeu | Précision | Rappel | Temps / fichier |
+| --- | --- | --- | --- | --- |
+| regex | développement | 67 % | 60 % | ~0,1 ms |
+| regex | **validation** | 67 % | **18 %** | ~0,1 ms |
+| ast | développement | 100 % | 100 % | ~0,2 ms |
+| ast | **validation** | **100 %** | **73 %** | ~0,3 ms |
 
 - **Précision** = VP / (VP + FP) : part des alertes qui sont de vraies failles.
 - **Rappel** = VP / (VP + FN) : part des vraies failles détectées.
 
-Principales causes d'erreur du moteur regex : variables interpolées dans les chaînes
-(`"... $nom ..."`), appels sur plusieurs lignes, requête construite dans une variable puis
-exécutée plus loin, fonctions d'échappement non reconnues (`htmlspecialchars`, `intval`,
-cast `(int)`), mots-clés dans des chaînes. Le moteur AST (phase 6) vise ces cas.
+Lecture honnête : le 100 % sur le jeu de développement est attendu, puisque le moteur a été
+écrit en le regardant. Sur le jeu de validation, l'AST détecte 4 fois plus de failles que
+la regex sans aucun faux positif. Les jeux restent petits (11 failles en validation) : ces
+chiffres comparent deux approches, ils ne mesurent pas un outil de production.
+
+Failles ratées par l'AST sur le jeu de validation :
+
+| Fichier | Cause |
+| --- | --- |
+| `function_param.php` | la souillure ne traverse pas les appels de fonction |
+| `request_array.php` | `$data = $_REQUEST` puis `$data['msg']` : copie de tableau non suivie |
+| `config_secret.php` | constantes de classe (`const DB_PASS = ...`) non analysées |
 
 ## Limites
 
-- Analyse intraprocédurale uniquement : pas de suivi entre fonctions ni entre fichiers.
+- Moteur AST intraprocédural : pas de suivi entre fonctions ni entre fichiers, ni dans les propriétés d'objets et cases de tableaux.
 - Les regex ne comprennent pas la structure du code (faux positifs dans les chaînes, appels sur plusieurs lignes).
 - Pas de prise en charge des frameworks (Laravel, Symfony) ni de leurs fonctions d'échappement.
 - Le moteur LLM est non déterministe, coûteux et sensible à l'injection de prompt.
@@ -142,7 +172,7 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 3 - Moteur regex + 5 règles
 - [x] Phase 4 - Rapports console, JSON, SARIF
 - [x] Phase 5 - Jeu de test et métriques
-- [ ] Phase 6 - Moteur AST (tree-sitter + taint)
+- [x] Phase 6 - Moteur AST (tree-sitter + taint)
 - [ ] Phase 7 - Démo sur Yappli vulnérable
 - [ ] Phase 7 bis - Comparaison avec un LLM
 - [ ] Phase 8 - Comparaison Semgrep (précision, rappel, temps par fichier)
