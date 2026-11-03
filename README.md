@@ -85,9 +85,43 @@ phpscan/
 ## Tests
 
 ```bash
-pytest          # 9 tests + 1 cas attendu en échec (faux positif connu du moteur regex)
+pytest          # 44 tests + 21 limites connues du moteur regex (xfail strict)
 ruff check .
 ```
+
+Les cas que le moteur regex rate ou signale à tort sont marqués `xfail(strict=True)` : ils
+documentent ses limites, et le test échoue dès qu'une amélioration en corrige un, pour
+qu'on mette la liste à jour.
+
+## Métriques
+
+Jeu de test étiqueté : 30 fichiers vulnérables et 28 fichiers sains « pièges » dans
+`tests/fixtures/`. Chaque vulnérabilité attendue est marquée sur sa ligne par
+`// EXPECT: <règle>`. Recalcul :
+
+```bash
+phpscan-metrics                       # tableau + liste des erreurs
+phpscan-metrics --format json         # pour comparer les moteurs
+```
+
+Moteur `regex` - 58 fichiers - 0.08 ms/fichier
+
+| Règle | VP | FP | FN | Précision | Rappel |
+| --- | --- | --- | --- | --- | --- |
+| PHP-EXEC-001 | 5 | 1 | 1 | 83% | 83% |
+| PHP-HASH-001 | 3 | 0 | 3 | 100% | 50% |
+| PHP-INPUT-001 | 4 | 3 | 2 | 57% | 67% |
+| PHP-SECRET-001 | 3 | 3 | 3 | 50% | 50% |
+| PHP-SQLI-001 | 3 | 2 | 3 | 60% | 50% |
+| **Total** | 18 | 9 | 12 | **67%** | **60%** |
+
+- **Précision** = VP / (VP + FP) : part des alertes qui sont de vraies failles.
+- **Rappel** = VP / (VP + FN) : part des vraies failles détectées.
+
+Principales causes d'erreur du moteur regex : variables interpolées dans les chaînes
+(`"... $nom ..."`), appels sur plusieurs lignes, requête construite dans une variable puis
+exécutée plus loin, fonctions d'échappement non reconnues (`htmlspecialchars`, `intval`,
+cast `(int)`), mots-clés dans des chaînes. Le moteur AST (phase 6) vise ces cas.
 
 ## Limites
 
@@ -107,7 +141,7 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 2 - Règles en YAML
 - [x] Phase 3 - Moteur regex + 5 règles
 - [x] Phase 4 - Rapports console, JSON, SARIF
-- [ ] Phase 5 - Jeu de test et métriques
+- [x] Phase 5 - Jeu de test et métriques
 - [ ] Phase 6 - Moteur AST (tree-sitter + taint)
 - [ ] Phase 7 - Démo sur Yappli vulnérable
 - [ ] Phase 7 bis - Comparaison avec un LLM
