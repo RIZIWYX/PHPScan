@@ -129,10 +129,12 @@ class Analyzer:
             if cast is not None and self.text(cast).lower() in SAFE_CASTS:
                 return False
         if t == "conditional_expression":
-            cond = node.named_children[0] if node.named_children else None
-            if cond is not None and cond.type == "function_call_expression" \
+            cond, *branches = node.named_children
+            if cond.type == "function_call_expression" \
                     and self.name_of(cond).lower() in WHITELIST_CHECKS:
                 return False  # valeur filtrée par liste blanche
+            # cond ? a : b -> la valeur vient de a ou de b, jamais de la condition
+            return any(self.is_tainted(b, st) for b in branches)
         if t in ("isset_expression", "unset_statement"):
             return False
         return any(self.is_tainted(c, st) for c in node.named_children)
