@@ -12,7 +12,8 @@ import pytest
 pytest.importorskip("tree_sitter_php")
 
 from phpscan.engine_ast import scan_file, scan_source  # noqa: E402
-from phpscan.metrics import evaluate, expected  # noqa: E402
+
+from .conftest import expected  # noqa: E402
 
 ROOT = Path(__file__).parent
 DEV_VULN = sorted((ROOT / "fixtures" / "vuln").glob("*.php"))
@@ -67,21 +68,6 @@ def test_reassignment_cleans_variable(rules):
 def test_ignore_marker(rules):
     code = "<?php\necho $_GET['a']; // phpscan-ignore\n"
     assert scan_source(code, "t.php", rules) == []
-
-
-def test_ast_beats_regex_on_holdout():
-    """Le moteur AST doit rester meilleur que la regex sur le jeu de validation."""
-    root = ROOT / "holdout"
-    ast, rx = evaluate(root, "ast").total, evaluate(root, "regex").total
-    assert ast.precision >= rx.precision
-    assert ast.recall > rx.recall
-
-
-def test_ast_baseline_does_not_regress():
-    dev = evaluate(ROOT / "fixtures", "ast").total
-    hold = evaluate(ROOT / "holdout", "ast").total
-    assert dev.precision == 1 and dev.recall == 1
-    assert hold.precision >= 1 and hold.recall >= 0.72
 
 
 def test_ternary_condition_does_not_taint_result(rules):

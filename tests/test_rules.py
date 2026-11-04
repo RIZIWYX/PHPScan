@@ -3,15 +3,14 @@ from pathlib import Path
 import pytest
 
 from phpscan.engine_regex import scan_file
-from phpscan.metrics import expected
 from phpscan.rules import RuleError, load_rules
 
-from .conftest import FIXTURES
+from .conftest import FIXTURES, expected
 
 VULN = sorted((FIXTURES / "vuln").glob("*.php"))
 SAFE = sorted((FIXTURES / "safe").glob("*.php"))
 
-# Limites connues du moteur regex, mesurées par phpscan-metrics.
+# Limites connues du moteur regex.
 # strict=True : si une amélioration corrige un cas, le test échoue pour qu'on retire
 # le fichier de la liste. Objectif de la phase 6 (AST) : vider ces deux ensembles.
 KNOWN_REGEX_FN = {
