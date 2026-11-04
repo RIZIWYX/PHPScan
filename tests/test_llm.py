@@ -205,3 +205,82 @@ def test_fatal_error_stops_scan(rules):
     llm.set_client(Refused([answer()]))
     with pytest.raises(SystemExit, match="clé API refusée"):
         llm.scan_source(CODE, "i.php", rules)
+
+
+# ---------------------------------------------------------------- fournisseur Groq (HTTP)
+
+class FakeResponse:
+    def __init__(self, body):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return json.dumps(self.body).encode()
+
+
+def groq_body(content, pt=50, ct=10):
+    return {"choices": [{"message": {"content": content}}],
+            "usage": {"prompt_tokens": pt, "completion_tokens": ct}}
+
+
+def test_groq_client_sends_openai_request(monkeypatch):
+    seen = {}
+
+    def opener(req, timeout):
+        seen["url"], seen["auth"] = req.full_url, req.get_header("Authorization")
+        seen["payload"] = json.loads(req.data)
+        return FakeResponse(groq_body(answer({"line": 2, "rule_id": "PHP-EXEC-001",
+                                              "explanation": "eval"})))
+
+    c = llm.OpenAICompatibleClient("openai/gpt-oss-20b", "gsk_factice", opener=opener)
+    comp = c.complete("bonjour")
+    assert seen["url"] == "https://api.groq.com/openai/v1/chat/completions"
+    assert seen["auth"] == "Bearer gsk_factice"
+    assert seen["payload"]["response_format"]["json_schema"]["strict"] is True
+    assert (comp.input_tokens, comp.output_tokens) == (50, 10)
+    assert json.loads(comp.text)["findings"][0]["rule_id"] == "PHP-EXEC-001"
+
+
+def test_groq_errors_are_classified():
+    c = llm.OpenAICompatibleClient("m", "k")
+    assert c._retryable(llm.HTTPError(429, "")) and c._retryable(llm.HTTPError(503, ""))
+    assert not c._retryable(llm.HTTPError(400, ""))
+    fatal = llm.LLMError("x")
+    fatal.__cause__ = llm.HTTPError(401, "invalid api key")
+    assert c.is_fatal(fatal)
+
+
+def test_retry_after_header_is_respected():
+    waits, calls = [], iter([llm.HTTPError(429, "", retry_after=7.0), "ok"])
+
+    def call():
+        v = next(calls)
+        if isinstance(v, Exception):
+            raise v
+        return v
+
+    assert llm.with_retries(call, lambda e: True, sleep=waits.append) == "ok"
+    assert waits == [7.0]
+
+
+def test_provider_selection(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PHPSCAN_LLM_PROVIDER", "groq")
+    monkeypatch.setenv("GROQ_API_KEY", "gsk_factice")
+    monkeypatch.delenv("PHPSCAN_LLM_MODEL", raising=False)
+    c = llm.get_client()
+    assert isinstance(c, llm.OpenAICompatibleClient) and c.model == "openai/gpt-oss-20b"
+    assert "gratuit" in llm.Usage().summary(c.model)
+
+
+def test_groq_missing_key(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PHPSCAN_LLM_PROVIDER", "groq")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    with pytest.raises(SystemExit, match="GROQ_API_KEY"):
+        llm.get_client()
