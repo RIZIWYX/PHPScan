@@ -10,8 +10,10 @@ Trajet d'un fichier
 6. comptabiliser jetons et coût
 
 Configuration (variables d'environnement, ou fichier .env à la racine du projet) :
-    ANTHROPIC_API_KEY   clé API (obligatoire, jamais dans le code)
-    PHPSCAN_LLM_MODEL   modèle (défaut : claude-haiku-5-5)
+    PHPSCAN_LLM_PROVIDER  anthropic (défaut) ou groq (offre gratuite, API compatible OpenAI)
+    ANTHROPIC_API_KEY     clé API Anthropic (fournisseur anthropic)
+    GROQ_API_KEY          clé API Groq (fournisseur groq)
+    PHPSCAN_LLM_MODEL     modèle (défaut : claude-haiku-5-5 ou openai/gpt-oss-20b)
     PHPSCAN_LLM_RUN     numéro de lancement, pour mesurer la stabilité (défaut : 0)
                         (le modèle n'est pas déterministe : pas de température dans l'API)
     PHPSCAN_LLM_CACHE   0 pour désactiver le cache (défaut : 1)
@@ -25,6 +27,8 @@ import os
 import re
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -35,7 +39,8 @@ ROOT = Path(__file__).resolve().parents[2]
 PROMPT_VERSION = "v2"
 PROMPT_PATH = ROOT / "prompts" / f"{PROMPT_VERSION}.txt"
 CACHE_DIR = Path(os.environ.get("PHPSCAN_LLM_CACHE_DIR", ".cache/llm"))
-DEFAULT_MODEL = "claude-haiku-5-5"
+DEFAULT_MODELS = {"anthropic": "claude-haiku-5-5", "groq": "openai/gpt-oss-20b"}
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
 MAX_TOKENS = 1024
 TIMEOUT_S = 60.0
 MAX_ATTEMPTS = 4          # 1 appel + 3 nouvelles tentatives
@@ -47,6 +52,9 @@ PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-opus-5-5": (4.0, 20.0),
+    # Groq, offre gratuite (limites de débit, pas de facturation)
+    "openai/gpt-oss-20b": (0.0, 0.0),
+    "openai/gpt-oss-120b": (0.0, 0.0),
 }
 
 
@@ -150,6 +158,67 @@ class AnthropicClient:
         return with_retries(call, self._retryable)
 
 
+class HTTPError(Exception):
+    """Erreur HTTP d'une API compatible OpenAI, avec son code et l'éventuel Retry-After."""
+
+    def __init__(self, status: int, body: str, retry_after: float | None = None):
+        super().__init__(f"HTTP {status}: {body[:200]}")
+        self.status, self.retry_after = status, retry_after
+
+
+class OpenAICompatibleClient:
+    """Client HTTP minimal (bibliothèque standard) pour une API au format OpenAI : Groq...
+
+    Écrit sans SDK pour montrer le protocole : POST JSON, en-tête Authorization: Bearer,
+    codes HTTP, Retry-After, sortie structurée via response_format json_schema.
+    """
+
+    def __init__(self, model: str, api_key: str, base_url: str = GROQ_BASE_URL,
+                 opener=urllib.request.urlopen):
+        self.model, self._key, self._url, self._open = model, api_key, base_url, opener
+
+    def _retryable(self, err: Exception) -> bool:
+        if isinstance(err, HTTPError):
+            return err.status == 429 or err.status >= 500
+        return isinstance(err, (urllib.error.URLError, TimeoutError))
+
+    def is_fatal(self, err: Exception) -> bool:
+        return isinstance(err.__cause__, HTTPError) and err.__cause__.status in (401, 403)
+
+    def _post(self, payload: dict) -> dict:
+        req = urllib.request.Request(
+            f"{self._url}/chat/completions", data=json.dumps(payload).encode(), method="POST",
+            headers={"Authorization": f"Bearer {self._key}", "Content-Type": "application/json",
+                     "User-Agent": "phpscan"},
+        )
+        try:
+            with self._open(req, timeout=TIMEOUT_S) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            retry = e.headers.get("Retry-After") if e.headers else None
+            raise HTTPError(e.code, e.read().decode("utf-8", "replace"),
+                            float(retry) if retry and retry.replace(".", "").isdigit() else None
+                            ) from None
+
+    def complete(self, prompt: str) -> Completion:
+        payload = {
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_completion_tokens": 4 * MAX_TOKENS,   # les modèles gpt-oss raisonnent avant
+            "response_format": {"type": "json_schema", "json_schema": {
+                "name": "phpscan_findings", "strict": True, "schema": RESPONSE_SCHEMA}},
+        }
+
+        def call() -> Completion:
+            data = self._post(payload)
+            usage = data.get("usage") or {}
+            text = data["choices"][0]["message"].get("content") or ""
+            return Completion(text, int(usage.get("prompt_tokens", 0)),
+                              int(usage.get("completion_tokens", 0)))
+
+        return with_retries(call, self._retryable)
+
+
 def with_retries(call, retryable, attempts: int = MAX_ATTEMPTS, base: float = BACKOFF_BASE_S,
                  sleep=time.sleep):
     """Exécute `call`, réessaie avec attente exponentielle si l'erreur est temporaire."""
@@ -159,7 +228,9 @@ def with_retries(call, retryable, attempts: int = MAX_ATTEMPTS, base: float = BA
         except Exception as err:
             if not retryable(err) or attempt == attempts - 1:
                 raise LLMError(f"échec de l'appel API : {type(err).__name__}: {err}") from err
-            sleep(base * 2 ** attempt)
+            # le serveur peut indiquer combien attendre (limite de débit) : on le respecte
+            wait = getattr(err, "retry_after", None) or base * 2 ** attempt
+            sleep(wait)
     raise AssertionError("inaccessible")  # pragma: no cover
 
 
@@ -183,7 +254,8 @@ class Usage:
 
     def summary(self, model: str) -> str:
         cost = self.cost(model)
-        cost_s = "inconnu" if cost is None else f"{cost:.4f} $"
+        cost_s = "inconnu" if cost is None else ("gratuit" if PRICES[model] == (0.0, 0.0)
+                                                  else f"{cost:.4f} $")
         return (f"[llm] modèle {model} - {self.calls} appel(s), {self.cache_hits} en cache, "
                 f"{self.input_tokens} jetons entrée / {self.output_tokens} sortie, coût {cost_s}, "
                 f"{self.invalid_responses} réponse(s) invalide(s), "
@@ -198,10 +270,16 @@ def get_client() -> LLMClient:
     global _client
     if _client is None:
         load_dotenv()
-        key = os.environ.get("ANTHROPIC_API_KEY")
+        provider = os.environ.get("PHPSCAN_LLM_PROVIDER", "anthropic").lower()
+        if provider not in DEFAULT_MODELS:
+            raise SystemExit(f"PHPSCAN_LLM_PROVIDER inconnu : {provider} (anthropic ou groq)")
+        key_name = "GROQ_API_KEY" if provider == "groq" else "ANTHROPIC_API_KEY"
+        key = os.environ.get(key_name)
         if not key:
-            raise SystemExit("ANTHROPIC_API_KEY manquante : ajoute-la dans .env ou l'environnement")
-        _client = AnthropicClient(os.environ.get("PHPSCAN_LLM_MODEL", DEFAULT_MODEL), key)
+            raise SystemExit(f"{key_name} manquante : ajoute-la dans .env ou l'environnement")
+        model = os.environ.get("PHPSCAN_LLM_MODEL", DEFAULT_MODELS[provider])
+        _client = (OpenAICompatibleClient(model, key) if provider == "groq"
+                   else AnthropicClient(model, key))
     return _client
 
 
