@@ -87,7 +87,7 @@ phpscan/
 ## Tests
 
 ```bash
-pytest          # 128 tests + 24 limites connues (xfail strict)
+pytest          # 130 tests + 24 limites connues (xfail strict)
 ruff check .
 ```
 
@@ -153,6 +153,24 @@ Failles ratées par l'AST sur le jeu de validation :
 | `request_array.php` | `$data = $_REQUEST` puis `$data['msg']` : copie de tableau non suivie |
 | `config_secret.php` | constantes de classe (`const DB_PASS = ...`) non analysées |
 
+## Démo sur un vrai projet : Yappli
+
+phpscan a été lancé sur [Yappli](https://github.com/RIZIWYX/Yappli), un réseau social PHP
+sans sécurité déjà audité à la main (12 failles recensées).
+
+| Moteur | Alertes | Vraies failles | Faux positifs |
+| --- | --- | --- | --- |
+| regex | 0 | 0 | 0 |
+| ast | 7 | 7 | 0 |
+
+Le moteur AST trouve **7 XSS réfléchies que l'audit manuel ne citait pas**. La regex
+n'en trouve aucune, car le code passe toujours par une variable avant d'afficher. La démo a
+aussi révélé un bug du moteur (ternaire), corrigé avec ses tests. En revanche, aucune des
+12 failles de l'audit n'est détectée : ce sont des défauts de conception (upload, sessions,
+CSRF...) hors de portée de 5 règles à motifs.
+
+Détails, exemples et pistes : [docs/DEMO_YAPPLI.md](docs/DEMO_YAPPLI.md).
+
 ## Limites
 
 - Moteur AST intraprocédural : pas de suivi entre fonctions ni entre fichiers, ni dans les propriétés d'objets et cases de tableaux.
@@ -173,7 +191,7 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 4 - Rapports console, JSON, SARIF
 - [x] Phase 5 - Jeu de test et métriques
 - [x] Phase 6 - Moteur AST (tree-sitter + taint)
-- [ ] Phase 7 - Démo sur Yappli vulnérable
+- [x] Phase 7 - Démo sur Yappli vulnérable
 - [ ] Phase 7 bis - Comparaison avec un LLM
 - [ ] Phase 8 - Comparaison Semgrep (précision, rappel, temps par fichier)
 
