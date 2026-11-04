@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import re
 import sys
 import time
@@ -56,6 +57,7 @@ class Report:
     duration_s: float
     per_rule: dict[str, Score] = field(default_factory=dict)
     misses: list[str] = field(default_factory=list)  # "FN fichier:ligne règle" / "FP ..."
+    found: set[tuple[str, int, str]] = field(default_factory=set)  # (fichier, ligne, règle)
 
     @property
     def total(self) -> Score:
@@ -74,11 +76,13 @@ def evaluate(root: Path = DEFAULT_DIR, engine: str = "regex",
     for r in rules:
         per_rule[r.id]  # toutes les règles apparaissent, même à 0
     misses: list[str] = []
+    found_all: set[tuple[str, int, str]] = set()
     start = time.perf_counter()
     for path in files:
         want = expected(path)
         got = {(f.line, f.rule_id) for f in scan_file(path, rules)}
         rel = path.relative_to(root) if path.is_relative_to(root) else path
+        found_all.update((str(rel), line, rid) for line, rid in got)
         for _line, rid in got & want:
             per_rule[rid].vp += 1
         for line, rid in sorted(got - want):
@@ -87,7 +91,17 @@ def evaluate(root: Path = DEFAULT_DIR, engine: str = "regex",
         for line, rid in sorted(want - got):
             per_rule[rid].fn += 1
             misses.append(f"FN {rel}:{line} {rid}")
-    return Report(engine, len(files), time.perf_counter() - start, dict(per_rule), misses)
+    return Report(engine, len(files), time.perf_counter() - start, dict(per_rule), misses,
+                  found_all)
+
+
+def stability(reports: list[Report]) -> float | None:
+    """Part des alertes trouvées à l'identique par tous les lancements (1 = stable)."""
+    union = set().union(*(r.found for r in reports))
+    if not union:
+        return None
+    common = set.intersection(*(r.found for r in reports))
+    return len(common) / len(union)
 
 
 def _pct(x: float | None) -> str:
@@ -124,12 +138,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("root", nargs="?", default=str(DEFAULT_DIR))
     p.add_argument("--engine", choices=["regex", "ast", "llm"], default="regex")
     p.add_argument("--format", choices=["table", "markdown", "json"], default="table")
+    p.add_argument("--runs", type=int, default=1,
+                   help="moteur llm : nombre de lancements, pour mesurer la stabilité")
     args = p.parse_args(argv)
+    reports: list[Report] = []
     try:
-        rep = evaluate(Path(args.root), args.engine)
+        for run in range(max(args.runs, 1)):
+            os.environ["PHPSCAN_LLM_RUN"] = str(run)
+            reports.append(evaluate(Path(args.root), args.engine))
     except NotImplementedError as e:
         print(f"Moteur {args.engine} pas encore disponible : {e}", file=sys.stderr)
         return 2
+    if args.engine == "llm":
+        from .engine_llm import USAGE, get_client
+        print(USAGE.summary(get_client().model), file=sys.stderr)
+    if len(reports) > 1:
+        for i, r in enumerate(reports):
+            t = r.total
+            print(f"lancement {i} : précision {_pct(t.precision)}, rappel {_pct(t.recall)}")
+        print(f"stabilité (alertes identiques sur les {len(reports)} lancements) : "
+              f"{_pct(stability(reports))}\n")
+    rep = reports[0]
     if args.format == "json":
         print(to_json(rep))
     else:
