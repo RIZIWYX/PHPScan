@@ -88,7 +88,7 @@ phpscan/
 ├── tests/holdout/      # Fichiers de validation, écrits après le moteur AST
 ├── tests/injection/    # Fichiers avec commentaires de manipulation (injection de prompt)
 ├── docs/               # Règles et démo sur Yappli
-├── benchmarks/         # Comparaison avec Semgrep (à venir)
+├── benchmarks/         # Commandes pour reproduire la comparaison avec Semgrep
 └── prompts/            # Prompts versionnés du moteur LLM
 ```
 
@@ -160,6 +160,28 @@ CSRF...) hors de portée de 5 règles à motifs.
 
 Détails, exemples et pistes : [docs/DEMO_YAPPLI.md](docs/DEMO_YAPPLI.md).
 
+## Comparaison avec Semgrep
+
+[Semgrep](https://semgrep.dev/) est un analyseur statique open source très utilisé en
+entreprise. Il a été lancé avec ses règles PHP communautaires (l'équivalent de `p/php`) sur
+les mêmes fichiers de test et sur Yappli. Commandes : [benchmarks/](benchmarks/semgrep_vs_phpscan.md).
+
+| | phpscan (ast) | Semgrep |
+| --- | --- | --- |
+| Injections SQL, exécution de commande, XSS | oui | oui |
+| Copie d'un tableau source (`$data = $_REQUEST`) | non | oui |
+| Secrets écrits en dur | oui | non, aucune règle PHP pour ça |
+| Hachage faible | seulement pour un mot de passe | tout `md5`/`sha1`, même pour un cache ou un ETag |
+| Cast `(int)`, liste blanche `in_array`, `json_encode` | reconnus comme sûrs | souvent signalés à tort |
+| Fichiers sains du jeu de validation | aucune fausse alerte | 4 fausses alertes sur 10 fichiers |
+| Résiste aux commentaires de manipulation | oui | oui |
+| Sur Yappli | 7 XSS réfléchies | les mêmes 7, plus 2 XSS stockées et le path traversal de l'audit (F-08), 1 fausse alerte |
+
+Bilan : sur un vrai projet, Semgrep va plus loin. Il a des centaines de règles, couvre plus
+de types de failles (path traversal, inclusion de fichier) et suit des cas que phpscan rate.
+Sur des cas piégeux, phpscan est plus précis, parce que ses 5 règles connaissent mieux les
+protections courantes. C'est le compromis classique entre un outil large et un outil ciblé.
+
 ## Limites
 
 - Moteur AST intraprocédural : pas de suivi entre fonctions ni entre fichiers, ni dans les propriétés d'objets et cases de tableaux.
@@ -182,7 +204,8 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 6 - Moteur AST (tree-sitter + taint)
 - [x] Phase 7 - Démo sur Yappli vulnérable
 - [x] Phase 7 bis - Moteur LLM (API Groq / Anthropic)
-- [ ] Phase 8 - Comparaison avec Semgrep
+- [x] Phase 8 - Comparaison avec Semgrep
+- [ ] Phase 9 - Intégration GitHub avec n8n (rapport automatique sur chaque pull request)
 
 ## Licence
 
