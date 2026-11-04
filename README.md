@@ -12,10 +12,10 @@
 
 Analyseur statique qui scanne du code PHP et signale des motifs à risque : injections SQL par concaténation, exécution de code ou de commandes, secrets en dur, hachage faible de mots de passe, entrées utilisateur non filtrées.
 
-Trois moteurs à comparer sur le même code :
-- **regex** *(fonctionnel)* : rapide, simple, nombreux faux positifs
-- **ast** *(en cours)* : arbre syntaxique PHP via tree-sitter + suivi de données souillées (taint)
-- **llm** *(prévu)* : analyse par un modèle de langage, pour comparaison (le prompt est versionné dans `prompts/`)
+Trois moteurs de détection, au choix avec `--engine` :
+- **regex** : recherche de motifs dans le texte
+- **ast** : arbre syntaxique PHP via tree-sitter + suivi des données souillées (taint)
+- **llm** : analyse par un modèle de langage via une API distante (Groq ou Anthropic)
 
 ## Aperçu
 
@@ -35,8 +35,6 @@ HIGH   tests/fixtures/vuln/weak_hash.php:2  PHP-HASH-001 md5/sha1 utilisé pour 
 2 fichier(s) analysé(s), 2 alerte(s) : 2 HIGH
 ```
 
-Sur le jeu de test actuel (5 fichiers vulnérables, 3 fichiers sains), le moteur regex détecte les **5 vulnérabilités** et produit **1 faux positif** sur un fichier sain : c'est précisément ce que le moteur AST doit corriger.
-
 ## Installation
 
 ```bash
@@ -44,7 +42,7 @@ git clone https://github.com/RIZIWYX/PHPScan.git
 cd phpscan
 python -m venv .venv
 source .venv/bin/activate        # Windows : .venv\Scripts\activate
-pip install -e ".[dev,ast]"     # ast = moteur tree-sitter
+pip install -e ".[dev,ast,llm]"   # ast = tree-sitter, llm = client Anthropic
 ```
 
 ## Utilisation
@@ -55,6 +53,15 @@ phpscan chemin/vers/projet --format json -o rapport.json
 phpscan chemin/vers/projet --format sarif -o rapport.sarif
 phpscan chemin/vers/projet --min-severity MEDIUM   # seulement les alertes MEDIUM et plus
 phpscan chemin/vers/projet --engine ast            # moteur AST + suivi de souillure (recommandé)
+phpscan chemin/vers/projet --engine llm            # moteur LLM (clé API nécessaire)
+```
+
+Le moteur LLM lit sa configuration dans l'environnement ou dans un fichier `.env` (ignoré
+par Git) à la racine du projet :
+
+```
+PHPSCAN_LLM_PROVIDER=groq        # groq (offre gratuite) ou anthropic
+GROQ_API_KEY=gsk_...             # ou ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 Code de sortie : `0` si aucune alerte au-dessus du seuil, `1` sinon (utilisable en CI).
@@ -77,33 +84,34 @@ Le détail de chaque règle (pourquoi c'est risqué, exemple vulnérable, correc
 phpscan/
 ├── src/phpscan/        # CLI, chargement, moteurs regex / ast / llm, rapports
 ├── rules/default.yml   # Règles en YAML
-├── tests/fixtures/     # Jeu de développement (58 fichiers étiquetés)
-├── tests/holdout/      # Jeu de validation (20 fichiers, jamais utilisés pour régler)
-├── docs/RULES.md       # Explication de chaque règle
+├── tests/fixtures/     # Fichiers PHP de test (vulnérables et sains)
+├── tests/holdout/      # Fichiers de validation, écrits après le moteur AST
+├── tests/injection/    # Fichiers avec commentaires de manipulation (injection de prompt)
+├── docs/               # Règles et démo sur Yappli
 ├── benchmarks/         # Comparaison avec Semgrep (à venir)
-└── prompts/            # Prompt du moteur LLM
+└── prompts/            # Prompts versionnés du moteur LLM
 ```
 
 ## Tests
 
 ```bash
-pytest          # 130 tests + 24 limites connues (xfail strict)
+pytest          # 148 tests + 24 limites connues (xfail strict)
 ruff check .
 ```
 
-Les cas qu'un moteur rate ou signale à tort sont marqués `xfail(strict=True)` : ils
-documentent ses limites, et le test échoue dès qu'une amélioration en corrige un, pour
-qu'on mette la liste à jour.
+Chaque faille attendue dans un fichier de test est marquée sur sa ligne par
+`// EXPECT: <règle>`. Les cas qu'un moteur rate ou signale à tort sont marqués
+`xfail(strict=True)` : ils documentent ses limites. Le moteur LLM est testé sans réseau,
+avec un faux client.
 
-## Deux moteurs
+## Les trois moteurs
 
-**regex** (`--engine regex`) cherche des motifs dans le texte. Rapide, mais il ne voit pas
-la structure du code : il se fait piéger par les chaînes et les commentaires, ne reconnaît
-pas les fonctions d'échappement et ne suit pas une valeur d'une ligne à l'autre.
+**regex** cherche des motifs dans le texte. Rapide, mais il ne voit pas la structure du
+code : il se fait piéger par les chaînes et les commentaires, ne reconnaît pas les
+fonctions d'échappement et ne suit pas une valeur d'une ligne à l'autre.
 
-**ast** (`--engine ast`) transforme le code en arbre syntaxique avec
-[tree-sitter](https://tree-sitter.github.io/) et suit les données souillées
-(*taint tracking*) :
+**ast** transforme le code en arbre syntaxique avec [tree-sitter](https://tree-sitter.github.io/)
+et suit les données souillées (*taint tracking*) :
 
 ```php
 $q = $_GET['q'];                 // source : $q devient souillée
@@ -112,46 +120,27 @@ echo $propre;                    // pas d'alerte
 echo "Résultats pour $q";        // $q souillée atteint un sink -> PHP-INPUT-001
 ```
 
-Sources : `$_GET`, `$_POST`, `$_REQUEST`, `$_COOKIE`. Sanitizers : `htmlspecialchars`,
-`intval`, `filter_input`, casts `(int)`/`(float)`, vérification `in_array` en liste blanche...
-Sinks : `echo`, `print`, `include`, requêtes SQL, fonctions d'exécution.
+**llm** envoie chaque fichier à un modèle via une API distante (Groq, au format OpenAI, ou
+Anthropic). Réponse en JSON imposé par un schéma, cache disque, nouvelles tentatives sur les
+erreurs temporaires (429, 5xx), alertes inventées rejetées, coût affiché.
 
-## Métriques
+### Comparaison rapide
 
-Deux jeux de fichiers étiquetés, chaque faille attendue étant marquée sur sa ligne par
-`// EXPECT: <règle>` :
+| | regex | ast | llm |
+| --- | --- | --- | --- |
+| Comprend la structure du code | non | oui | oui, et le sens |
+| Suit une valeur d'une ligne à l'autre | non | oui, dans une fonction | oui |
+| Piégé par du code dans un commentaire | non (commentaires retirés) | non | parfois |
+| Même résultat à chaque lancement | oui | oui | non |
+| Vitesse | instantané | instantané | quelques secondes par fichier |
+| Résiste à l'injection de prompt | oui | oui | oui sur nos 5 cas, sans garantie |
+| Coût | gratuit | gratuit | API (offre gratuite chez Groq) |
 
-- **développement** (`tests/fixtures/`, 58 fichiers) : utilisé pour écrire les règles ;
-- **validation** (`tests/holdout/`, 20 fichiers) : écrit après le moteur AST et jamais
-  utilisé pour le régler. C'est la mesure qui compte.
-
-```bash
-phpscan-metrics --engine ast                  # jeu de développement
-phpscan-metrics tests/holdout --engine ast    # jeu de validation
-```
-
-| Moteur | Jeu | Précision | Rappel | Temps / fichier |
-| --- | --- | --- | --- | --- |
-| regex | développement | 67 % | 60 % | ~0,1 ms |
-| regex | **validation** | 67 % | **18 %** | ~0,1 ms |
-| ast | développement | 100 % | 100 % | ~0,2 ms |
-| ast | **validation** | **100 %** | **73 %** | ~0,3 ms |
-
-- **Précision** = VP / (VP + FP) : part des alertes qui sont de vraies failles.
-- **Rappel** = VP / (VP + FN) : part des vraies failles détectées.
-
-Lecture honnête : le 100 % sur le jeu de développement est attendu, puisque le moteur a été
-écrit en le regardant. Sur le jeu de validation, l'AST détecte 4 fois plus de failles que
-la regex sans aucun faux positif. Les jeux restent petits (11 failles en validation) : ces
-chiffres comparent deux approches, ils ne mesurent pas un outil de production.
-
-Failles ratées par l'AST sur le jeu de validation :
-
-| Fichier | Cause |
-| --- | --- |
-| `function_param.php` | la souillure ne traverse pas les appels de fonction |
-| `request_array.php` | `$data = $_REQUEST` puis `$data['msg']` : copie de tableau non suivie |
-| `config_secret.php` | constantes de classe (`const DB_PASS = ...`) non analysées |
+En pratique : l'**ast** est le moteur de référence, fiable, rapide et reproductible. Il est
+fait pour la CI. Le **llm** trouve des failles qui demandent de comprendre le code (donnée
+passée à une fonction, copie de tableau), mais il est lent et instable : il sert de second
+avis. La **regex** reste utile comme point de comparaison et pour analyser le contenu des
+chaînes.
 
 ## Démo sur un vrai projet : Yappli
 
@@ -176,7 +165,7 @@ Détails, exemples et pistes : [docs/DEMO_YAPPLI.md](docs/DEMO_YAPPLI.md).
 - Moteur AST intraprocédural : pas de suivi entre fonctions ni entre fichiers, ni dans les propriétés d'objets et cases de tableaux.
 - Les regex ne comprennent pas la structure du code (faux positifs dans les chaînes, appels sur plusieurs lignes).
 - Pas de prise en charge des frameworks (Laravel, Symfony) ni de leurs fonctions d'échappement.
-- Le moteur LLM est non déterministe, coûteux et sensible à l'injection de prompt.
+- Le moteur LLM est non déterministe, lent, et peut en théorie être manipulé par le contenu qu'il analyse.
 
 ## Ignorer une alerte
 
@@ -189,11 +178,11 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 2 - Règles en YAML
 - [x] Phase 3 - Moteur regex + 5 règles
 - [x] Phase 4 - Rapports console, JSON, SARIF
-- [x] Phase 5 - Jeu de test et métriques
+- [x] Phase 5 - Jeu de test
 - [x] Phase 6 - Moteur AST (tree-sitter + taint)
 - [x] Phase 7 - Démo sur Yappli vulnérable
-- [ ] Phase 7 bis - Comparaison avec un LLM
-- [ ] Phase 8 - Comparaison Semgrep (précision, rappel, temps par fichier)
+- [x] Phase 7 bis - Moteur LLM (API Groq / Anthropic)
+- [ ] Phase 8 - Comparaison avec Semgrep
 
 ## Licence
 

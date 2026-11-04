@@ -14,8 +14,7 @@ Configuration (variables d'environnement, ou fichier .env à la racine du projet
     ANTHROPIC_API_KEY     clé API Anthropic (fournisseur anthropic)
     GROQ_API_KEY          clé API Groq (fournisseur groq)
     PHPSCAN_LLM_MODEL     modèle (défaut : claude-haiku-5-5 ou openai/gpt-oss-20b)
-    PHPSCAN_LLM_RUN     numéro de lancement, pour mesurer la stabilité (défaut : 0)
-                        (le modèle n'est pas déterministe : pas de température dans l'API)
+    PHPSCAN_LLM_RUN     numéro de lancement, entre dans la clé du cache (défaut : 0)
     PHPSCAN_LLM_CACHE   0 pour désactiver le cache (défaut : 1)
 """
 
@@ -120,7 +119,7 @@ class AnthropicClient:
     """Appel à l'API Messages d'Anthropic, avec nouvelles tentatives gérées ici.
 
     Le SDK actuel n'expose plus de paramètre de température : le modèle n'est donc pas
-    déterministe, d'où la mesure de stabilité sur plusieurs lancements (--runs).
+    déterministe : deux lancements peuvent donner des résultats différents.
     """
 
     def __init__(self, model: str, api_key: str):

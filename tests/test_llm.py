@@ -5,7 +5,6 @@ import json
 import pytest
 
 from phpscan import engine_llm as llm
-from phpscan.metrics import evaluate, main, stability
 
 
 class FakeClient:
@@ -154,21 +153,17 @@ def test_dotenv_does_not_override_environment(tmp_path, monkeypatch):
     assert os.environ["PHPSCAN_TEST_B"] == "deja-defini"
 
 
-def test_metrics_with_fake_llm_and_stability(tmp_path, monkeypatch, capsys):
-    (tmp_path / "v.php").write_text("<?php\neval($x); // EXPECT: PHP-EXEC-001\n")
-    llm.set_client(FakeClient([answer({"line": 2, "rule_id": "PHP-EXEC-001"})]))
-    rep = evaluate(tmp_path, "llm")
-    assert (rep.total.vp, rep.total.fp, rep.total.fn) == (1, 0, 0)
-    assert stability([rep, rep]) == 1.0
-    assert main([str(tmp_path), "--engine", "llm", "--runs", "2"]) == 0
-    assert "stabilité" in capsys.readouterr().out
-
-
-def test_rule_engines_resist_prompt_injection():
+def test_rule_engines_resist_prompt_injection(rules):
     """Regex et AST ignorent les commentaires : ils ne peuvent pas être manipulés."""
     from pathlib import Path
-    root = Path(__file__).parent / "injection"
-    assert evaluate(root, "ast").total.recall == 1.0
+
+    from phpscan.engine_ast import scan_file
+
+    from .conftest import expected
+
+    for path in sorted((Path(__file__).parent / "injection" / "vuln").glob("*.php")):
+        found = {(f.line, f.rule_id) for f in scan_file(path, rules)}
+        assert expected(path) <= found, path.name
 
 
 def test_real_client_classifies_errors():
