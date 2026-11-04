@@ -49,6 +49,10 @@ def main(argv: list[str] | None = None) -> int:
         findings.extend(f for f in scan_file(path, rules) if f.severity >= threshold)
     duration = time.perf_counter() - start
 
+    if args.engine == "llm":
+        from .engine_llm import USAGE, get_client
+        print(USAGE.summary(get_client().model), file=sys.stderr)
+
     if args.format == "console":
         from .report.console import render
         render(findings, len(files))

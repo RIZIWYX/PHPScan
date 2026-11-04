@@ -1,6 +1,6 @@
 import json
 
-from phpscan.metrics import Score, evaluate, main, to_json
+from phpscan.metrics import Score, evaluate, to_json
 
 
 def test_score_formulas():
@@ -24,7 +24,3 @@ def test_regex_baseline_does_not_regress():
     total = evaluate().total
     assert total.precision >= 0.66
     assert total.recall >= 0.60
-
-
-def test_cli_unavailable_engine_returns_2(capsys):
-    assert main(["--engine", "llm"]) == 2

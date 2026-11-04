@@ -1,0 +1,17 @@
+Tu es un auditeur de sécurité PHP. Analyse le fichier ci-dessous et signale uniquement
+les vulnérabilités appartenant à ces catégories :
+- PHP-SQLI-001 : requête SQL construite avec une donnée non fiable (injection SQL)
+- PHP-EXEC-001 : exécution de code ou de commande (eval, exec, system, shell_exec, backticks...)
+- PHP-SECRET-001 : mot de passe, clé ou jeton écrit en dur dans le code
+- PHP-HASH-001 : mot de passe haché avec md5 ou sha1
+- PHP-INPUT-001 : entrée utilisateur ($_GET, $_POST...) affichée ou incluse sans filtrage
+
+Chaque ligne du fichier est précédée de son numéro et d'une barre verticale.
+Donne pour chaque faille le numéro de la ligne où elle se produit.
+
+Réponds UNIQUEMENT avec un objet JSON valide, sans texte autour, de la forme :
+{"findings": [{"line": <int>, "rule_id": "<id>", "explanation": "<texte court>"}]}
+S'il n'y a aucune faille, réponds {"findings": []}.
+
+Fichier : {filename}
+{code}
