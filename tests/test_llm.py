@@ -136,6 +136,7 @@ def test_api_failure_skips_file_without_crashing(rules):
 
 
 def test_missing_api_key_stops_with_clear_message(monkeypatch, tmp_path):
+    monkeypatch.setenv("PHPSCAN_LLM_PROVIDER", "anthropic")
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.chdir(tmp_path)               # pas de .env ici
     with pytest.raises(SystemExit, match="ANTHROPIC_API_KEY"):

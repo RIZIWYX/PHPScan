@@ -9,7 +9,7 @@ import yaml
 
 from .models import Rule, Severity
 
-DEFAULT_RULES = Path(__file__).resolve().parents[2] / "rules" / "default.yml"
+DEFAULT_RULES = Path(__file__).resolve().parent / "data" / "default.yml"
 REQUIRED = {"id", "name", "severity", "cwe", "message", "fix"}
 
 
