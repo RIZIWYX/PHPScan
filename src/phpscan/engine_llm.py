@@ -10,7 +10,7 @@ Trajet d'un fichier
 6. comptabiliser jetons et coût
 
 Configuration (variables d'environnement, ou fichier .env à la racine du projet) :
-    PHPSCAN_LLM_PROVIDER  anthropic (défaut) ou groq (offre gratuite, API compatible OpenAI)
+    PHPSCAN_LLM_PROVIDER  groq (défaut, offre gratuite, API compatible OpenAI) ou anthropic
     ANTHROPIC_API_KEY     clé API Anthropic (fournisseur anthropic)
     GROQ_API_KEY          clé API Groq (fournisseur groq)
     PHPSCAN_LLM_MODEL     modèle (défaut : claude-haiku-5-5 ou openai/gpt-oss-20b)
@@ -151,7 +151,7 @@ class AnthropicClient:
                 messages=[{"role": "user", "content": prompt}],
                 output_config={"format": {"type": "json_schema", "schema": RESPONSE_SCHEMA}},
             )
-            text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
+            text = "".join(getattr(b, "text", "") for b in msg.content if b.type == "text")
             return Completion(text, msg.usage.input_tokens, msg.usage.output_tokens)
 
         return with_retries(call, self._retryable)
@@ -269,7 +269,7 @@ def get_client() -> LLMClient:
     global _client
     if _client is None:
         load_dotenv()
-        provider = os.environ.get("PHPSCAN_LLM_PROVIDER", "anthropic").lower()
+        provider = os.environ.get("PHPSCAN_LLM_PROVIDER", "groq").lower()
         if provider not in DEFAULT_MODELS:
             raise SystemExit(f"PHPSCAN_LLM_PROVIDER inconnu : {provider} (anthropic ou groq)")
         key_name = "GROQ_API_KEY" if provider == "groq" else "ANTHROPIC_API_KEY"

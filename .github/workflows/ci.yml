@@ -14,4 +14,5 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[dev,ast,llm]"
       - run: ruff check .
+      - run: mypy src
       - run: pytest --cov=phpscan

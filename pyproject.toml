@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phpscan"
-version = "0.1.0"
+version = "1.0.0"
 description = "Analyseur statique pédagogique de motifs à risque dans du code PHP"
 readme = "README.md"
 license = { text = "MIT" }
@@ -24,7 +24,7 @@ phpscan = "phpscan.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-phpscan = ["../../rules/*.yml"]
+phpscan = ["data/*.yml"]
 
 [tool.ruff]
 line-length = 100

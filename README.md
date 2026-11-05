@@ -3,7 +3,7 @@
 [![CI](https://github.com/RIZIWYX/PHPScan/actions/workflows/ci.yml/badge.svg)](https://github.com/RIZIWYX/PHPScan/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.12-blue)
 ![Sortie](https://img.shields.io/badge/rapports-console%20%7C%20JSON%20%7C%20SARIF-informational)
-![Statut](https://img.shields.io/badge/statut-en%20d%C3%A9veloppement-yellow)
+![Statut](https://img.shields.io/badge/statut-termin%C3%A9-brightgreen)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
 ![Démo : analyse de fichiers PHP vulnérables, rapport JSON et tests](docs/demo.gif)
@@ -39,10 +39,10 @@ HIGH   tests/fixtures/vuln/weak_hash.php:2  PHP-HASH-001 md5/sha1 utilisé pour 
 
 ```bash
 git clone https://github.com/RIZIWYX/PHPScan.git
-cd phpscan
+cd PHPScan
 python -m venv .venv
 source .venv/bin/activate        # Windows : .venv\Scripts\activate
-pip install -e ".[dev,ast,llm]"   # ast = tree-sitter, llm = client Anthropic
+pip install -e ".[dev,ast,llm]"   # ast = tree-sitter, llm = client Anthropic (Groq n'a besoin de rien)
 ```
 
 ## Utilisation
@@ -60,7 +60,7 @@ Le moteur LLM lit sa configuration dans l'environnement ou dans un fichier `.env
 par Git) à la racine du projet :
 
 ```
-PHPSCAN_LLM_PROVIDER=groq        # groq (offre gratuite) ou anthropic
+PHPSCAN_LLM_PROVIDER=groq        # groq (défaut, offre gratuite) ou anthropic
 GROQ_API_KEY=gsk_...             # ou ANTHROPIC_API_KEY=sk-ant-...
 ```
 
@@ -83,7 +83,7 @@ Le détail de chaque règle (pourquoi c'est risqué, exemple vulnérable, correc
 ```
 phpscan/
 ├── src/phpscan/        # CLI, chargement, moteurs regex / ast / llm, rapports
-├── rules/default.yml   # Règles en YAML
+│   └── data/default.yml  # Règles en YAML
 ├── tests/fixtures/     # Fichiers PHP de test (vulnérables et sains)
 ├── tests/holdout/      # Fichiers de validation, écrits après le moteur AST
 ├── tests/injection/    # Fichiers avec commentaires de manipulation (injection de prompt)
@@ -189,6 +189,11 @@ protections courantes. C'est le compromis classique entre un outil large et un o
 - Pas de prise en charge des frameworks (Laravel, Symfony) ni de leurs fonctions d'échappement.
 - Le moteur LLM est non déterministe, lent, et peut en théorie être manipulé par le contenu qu'il analyse.
 
+## Pistes d'évolution
+
+- Intégration GitHub avec n8n : rapport automatique sur chaque pull request.
+- Suivi de souillure entre fonctions et entre fichiers.
+
 ## Ignorer une alerte
 
 Ajouter `// phpscan-ignore` en fin de ligne.
@@ -205,7 +210,6 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 7 - Démo sur Yappli vulnérable
 - [x] Phase 7 bis - Moteur LLM (API Groq / Anthropic)
 - [x] Phase 8 - Comparaison avec Semgrep
-- [ ] Phase 9 - Intégration GitHub avec n8n (rapport automatique sur chaque pull request)
 
 ## Licence
 
