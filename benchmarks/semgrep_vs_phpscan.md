@@ -1,13 +1,20 @@
-# Comparaison phpscan / Semgrep / LLM
+# Reproduire la comparaison avec Semgrep
 
-_À compléter en phases 7 bis et 8._
-
-Commandes :
+Versions utilisées : Semgrep 1.183.0, règles PHP communautaires de
+[semgrep-rules](https://github.com/semgrep/semgrep-rules) (dossier `php/`, commit `16b9e6d`,
+octobre 2026), soit le contenu du jeu de règles `p/php`.
 
 ```bash
-phpscan tests/fixtures --format json -o phpscan.json
-semgrep --config p/php tests/fixtures --json -o semgrep.json
-```
+pip install semgrep
+git clone --depth 1 https://github.com/semgrep/semgrep-rules
+mkdir regles-php && find semgrep-rules/php -name '*.yaml' ! -name '*.test.yaml' -exec cp {} regles-php/ \;
 
-| Cas | regex | ast | llm | Semgrep |
-| --- | --- | --- | --- | --- |
+# Semgrep ignore par défaut les dossiers « tests/ » : on analyse une copie
+mkdir cas && cp -r tests/fixtures tests/holdout tests/injection cas/
+semgrep --config regles-php cas --metrics=off
+
+# Yappli, branche main
+git clone https://github.com/RIZIWYX/Yappli
+semgrep --config regles-php Yappli --metrics=off
+phpscan Yappli --engine ast
+```
