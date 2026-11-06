@@ -87,7 +87,7 @@ phpscan/
 ├── tests/fixtures/     # Fichiers PHP de test (vulnérables et sains)
 ├── tests/holdout/      # Fichiers de validation, écrits après le moteur AST
 ├── tests/injection/    # Fichiers avec commentaires de manipulation (injection de prompt)
-├── docs/               # Règles et démo sur Yappli
+├── docs/               # Règles et démo sur Yapply
 ├── benchmarks/         # Commandes pour reproduire la comparaison avec Semgrep
 └── prompts/            # Prompts versionnés du moteur LLM
 ```
@@ -142,9 +142,9 @@ passée à une fonction, copie de tableau), mais il est lent et instable : il se
 avis. La **regex** reste utile comme point de comparaison et pour analyser le contenu des
 chaînes.
 
-## Démo sur un vrai projet : Yappli
+## Démo sur un vrai projet : Yapply
 
-phpscan a été lancé sur [Yappli](https://github.com/RIZIWYX/Yappli), un réseau social PHP
+phpscan a été lancé sur [Yapply](https://github.com/RIZIWYX/Yapply), un réseau social PHP
 sans sécurité déjà audité à la main (12 failles recensées).
 
 | Moteur | Alertes | Vraies failles | Faux positifs |
@@ -158,13 +158,13 @@ aussi révélé un bug du moteur (ternaire), corrigé avec ses tests. En revanch
 12 failles de l'audit n'est détectée : ce sont des défauts de conception (upload, sessions,
 CSRF...) hors de portée de 5 règles à motifs.
 
-Détails, exemples et pistes : [docs/DEMO_YAPPLI.md](docs/DEMO_YAPPLI.md).
+Détails, exemples et pistes : [docs/DEMO_YAPPLY.md](docs/DEMO_YAPPLY.md).
 
 ## Comparaison avec Semgrep
 
 [Semgrep](https://semgrep.dev/) est un analyseur statique open source très utilisé en
 entreprise. Il a été lancé avec ses règles PHP communautaires (l'équivalent de `p/php`) sur
-les mêmes fichiers de test et sur Yappli. Commandes : [benchmarks/](benchmarks/semgrep_vs_phpscan.md).
+les mêmes fichiers de test et sur Yapply. Commandes : [benchmarks/](benchmarks/semgrep_vs_phpscan.md).
 
 | | phpscan (ast) | Semgrep |
 | --- | --- | --- |
@@ -175,7 +175,7 @@ les mêmes fichiers de test et sur Yappli. Commandes : [benchmarks/](benchmarks/
 | Cast `(int)`, liste blanche `in_array`, `json_encode` | reconnus comme sûrs | souvent signalés à tort |
 | Fichiers sains du jeu de validation | aucune fausse alerte | 4 fausses alertes sur 10 fichiers |
 | Résiste aux commentaires de manipulation | oui | oui |
-| Sur Yappli | 7 XSS réfléchies | les mêmes 7, plus 2 XSS stockées et le path traversal de l'audit (F-08), 1 fausse alerte |
+| Sur Yapply | 7 XSS réfléchies | les mêmes 7, plus 2 XSS stockées et le path traversal de l'audit (F-08), 1 fausse alerte |
 
 Bilan : sur un vrai projet, Semgrep va plus loin. Il a des centaines de règles, couvre plus
 de types de failles (path traversal, inclusion de fichier) et suit des cas que phpscan rate.
@@ -207,7 +207,7 @@ Ajouter `// phpscan-ignore` en fin de ligne.
 - [x] Phase 4 - Rapports console, JSON, SARIF
 - [x] Phase 5 - Jeu de test
 - [x] Phase 6 - Moteur AST (tree-sitter + taint)
-- [x] Phase 7 - Démo sur Yappli vulnérable
+- [x] Phase 7 - Démo sur Yapply vulnérable
 - [x] Phase 7 bis - Moteur LLM (API Groq / Anthropic)
 - [x] Phase 8 - Comparaison avec Semgrep
 

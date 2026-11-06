@@ -13,8 +13,8 @@ mkdir regles-php && find semgrep-rules/php -name '*.yaml' ! -name '*.test.yaml' 
 mkdir cas && cp -r tests/fixtures tests/holdout tests/injection cas/
 semgrep --config regles-php cas --metrics=off
 
-# Yappli, branche main
-git clone https://github.com/RIZIWYX/Yappli
-semgrep --config regles-php Yappli --metrics=off
-phpscan Yappli --engine ast
+# Yapply, branche main
+git clone https://github.com/RIZIWYX/Yapply
+semgrep --config regles-php Yapply --metrics=off
+phpscan Yapply --engine ast
 ```

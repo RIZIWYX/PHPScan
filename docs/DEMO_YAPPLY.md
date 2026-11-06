@@ -1,8 +1,8 @@
-# Démo : phpscan sur Yappli
+# Démo : phpscan sur Yapply
 
-[Yappli](https://github.com/RIZIWYX/Yappli) est un petit réseau social en PHP réalisé en
+[Yapply](https://github.com/RIZIWYX/Yapply) est un petit réseau social en PHP réalisé en
 groupe, volontairement sans sécurité sur sa branche `main`. Un
-[audit de sécurité manuel](https://github.com/RIZIWYX/Yappli/blob/main/doc/AUDIT_SECURITE_YAPPLI.md)
+[audit de sécurité manuel](https://github.com/RIZIWYX/Yapply/blob/main/doc/AUDIT_SECURITE_YAPPLY.md)
 y a recensé 12 failles (F-01 à F-12). C'est un vrai projet, que ni les règles ni les moteurs
 de phpscan n'ont vu pendant leur écriture : un bon test grandeur nature.
 
@@ -11,9 +11,9 @@ Version analysée : branche `main`, commit `1a9237e`, 17 fichiers PHP.
 ## Reproduire
 
 ```bash
-git clone https://github.com/RIZIWYX/Yappli
-phpscan Yappli --engine regex
-phpscan Yappli --engine ast
+git clone https://github.com/RIZIWYX/Yapply
+phpscan Yapply --engine regex
+phpscan Yapply --engine ast
 ```
 
 ## Résultats
@@ -45,7 +45,7 @@ formulaire. L'outil complète donc l'audit humain sur ce point.
 
 ### Pourquoi la regex ne trouve rien
 
-Le code de Yappli passe toujours par une variable avant d'afficher :
+Le code de Yapply passe toujours par une variable avant d'afficher :
 
 ```php
 $ami = trim($_POST['username']);   // ligne 13
@@ -58,7 +58,7 @@ jamais les deux ensemble. Le suivi de souillure de l'AST relie la ligne 13 à la
 C'est exactement le faux négatif mesuré sur le jeu de test (`input_var_then_echo.php`), mais
 cette fois sur du vrai code : 0 alerte contre 7.
 
-## Un bug trouvé grâce à Yappli
+## Un bug trouvé grâce à Yapply
 
 La première analyse donnait 9 alertes, dont une fausse :
 

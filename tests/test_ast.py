@@ -71,7 +71,7 @@ def test_ignore_marker(rules):
 
 
 def test_ternary_condition_does_not_taint_result(rules):
-    """Bug trouvé sur Yappli (accueil.php) : la condition ne souille pas le résultat."""
+    """Bug trouvé sur Yapply (accueil.php) : la condition ne souille pas le résultat."""
     code = ("<?php\n$id = isset($_POST['id']) && $_POST['id'] !== '' ? (int) $_POST['id'] : null;\n"
             "echo $id;\n")
     assert scan_source(code, "t.php", rules) == []
